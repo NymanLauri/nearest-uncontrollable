@@ -4,40 +4,54 @@
 % addpath("./software_rob_sc/fo_dist_uncont")
 % addpath("./software_rob_sc/fo_dist_uncont/private_folder")
 
-n = 10;
-
-% rng(1,"twister")
-
-%Real input
-A = randn(n);
-b = randn(n,1);
-
-% %Complex input
-% A = randn(n) + 1i*randn(n) ;
-% b = randn(n,1) + 1i*randn(n,1);
+rng(1,"twister")
 
 options = struct();
 options.eig_method = 0;
-options.method = 2;
+options.method = 1;
 options.print_dtl = 1;
-options.tol = 0.001;
+options.tol = 1e-8;
+% options.prtlevel = 1;
 
-[f,z,tol] = dist_uncont_hybrid(A, b, options)
+options_riemann.maxiter = 50;
+options_riemann.maxtime = 100;
+options_riemann.verbosity = 1;
 
-% svd([A-A^0*z b])
+list_sizes = [15];
+n_sample = 10;
 
-% ----------------
-% 
-% maxiter = 50;
-% maxtime = 100;
-% [S,t,distance,time_seconds,Q,infotable] = nearest_uncontrollable(A, b, maxiter, maxtime);
-% 
-% % The constructed uncontrollable pencil is [t S+xI]
-% 
-% % Construct the canonical form
-% S_tri = Q'*S*Q;
-% t_tri = Q'*t;
-% 
-% f
-% distance(end)
+d_riemann = zeros(list_sizes(end), n_sample);
+d_them = zeros(list_sizes(end), n_sample);
+
+t_riemann = zeros(list_sizes(end), n_sample);
+t_them = zeros(list_sizes(end), n_sample);
+
+for j = 1:n_sample
+    j
+    for m = list_sizes
+
+        % Complex input
+        A = randn(m) + 1i*randn(m) ;
+        b = randn(m,1) + 1i*randn(m,1);
+              
+        tic
+        [f,z,tol] = dist_uncont_hybrid(A, b, options);
+        t1 = toc;
+        
+        tic
+        [S,t,distance,Q] = outer(A, b, options_riemann);
+        t2 = toc;
+
+        d_riemann(m,j) = distance(end);
+        d_them(m,j) = f;
+    
+        t_riemann(m,j) = t2;
+        t_them(m,j) = t1;
+    end
+end
+
+[mean(t_riemann(m,:),2) mean(t_them(m,:),2)]
+[mean(d_riemann(m,:),2) mean(d_them(m,:),2)]
+
+
 

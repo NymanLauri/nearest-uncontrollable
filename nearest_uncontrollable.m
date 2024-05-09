@@ -1,4 +1,4 @@
-function [S,t,distance,time_seconds,Q,infotable] = nearest_uncontrollable(A, b, maxiter, timemax_seconds, x0)
+function [S,t,distance,time_seconds,Q,infotable] = nearest_uncontrollable(A, b, options, x0)
 % Computes a (locally) nearest complex uncontrollable pencil [t S+xI]
 % to the rectangular pencil [b A+xI]. If the pencil [b A+xI] and the 
 % starting point x0 are both real, the output [t S+xI] will be real.
@@ -33,11 +33,8 @@ function [S,t,distance,time_seconds,Q,infotable] = nearest_uncontrollable(A, b, 
 
 n = length(A);
 
-if not(exist('maxiter', 'var'))
-    maxiter = 1000;
-end
-if not(exist('timemax_seconds', 'var'))
-    timemax_seconds = 1000;
+if not(exist('options', 'var'))
+    options = struct();
 end
 if not(exist('x0', 'var'))
     x0 = [];
@@ -57,14 +54,16 @@ problem.cost = @cost;
 % The code uses the Euclidean gradient. Projection to 
 % the tangent space of U(n) is handled automatically (see 
 % stiefelcomplexfactory documentation)
-% problem.egrad = @egrad;
+problem.egrad = @egrad;
 % Euclidean Hessian. Projection is handled automatically.
-% problem.ehess = @ehess;
+problem.ehess = @ehess;
 
-options.tolgradnorm = 1e-10;
-options.maxiter = maxiter;
-options.maxtime = timemax_seconds;
-options.verbosity = 2; % 2 = Default; 0 = No output; 
+default.tolgradnorm = 1e-10;
+default.maxiter = 100;
+default.maxtime = 100;
+default.verbosity = 1; % 2 = Default; 0 = No output; 
+
+options = mergeOptions(default, options);
 
 [Q, xcost, info, ~] = trustregions(problem, x0, options);
 
@@ -104,72 +103,37 @@ function f = cost(Q)
     f = norm(tril([t S],-1),'fro')^2 + min(diag(abs([t S])).^2);
     
 end
-% 
-% function g = egrad(Q)
-% 
-%     Q1 = Q(:,:,1);
-%     Q2 = Q(:,:,2);
-% 
-%     M11 = B*Q2;
-%     M01 = A*Q2;
-% 
-%     M12 = Q1*B;
-%     M02 = Q1*A;
-% 
-%     T = Q1*B*Q2;
-%     S = Q1*A*Q2;
-% 
-%     L1 = tril(T,-1);
-%     L0 = tril(S,-1);
-% 
-%     % Add "min" part of the objective function
-%     [~,k] = min(abs(diag(T)).^2 + abs(diag(S)).^2);
-%     L1(k,k) = T(k,k);
-%     L0(k,k) = S(k,k);
-% 
-%     g = zeros(size(Q));
-%     g(:,:,1) = 2* L1 * M11' + 2* L0 * M01';
-%     g(:,:,2) = 2* M12' * L1 + 2* M02' * L0;
-% 
-% end
-% 
-% function H = ehess(Q, d)
-% 
-%     Q1 = Q(:,:,1);
-%     Q2 = Q(:,:,2);
-% 
-%     d1 = d(:,:,1);
-%     d2 = d(:,:,2);
-% 
-%     M11 = B*Q2;
-%     M01 = A*Q2;
-% 
-%     M12 = Q1*B;
-%     M02 = Q1*A;
-% 
-%     T = Q1*B*Q2;
-%     S = Q1*A*Q2;
-% 
-%     H = zeros(size(Q));
-% 
-%     % Add "min" part of the objective function
-%     [~,k] = min(abs(diag(T)).^2 + abs(diag(S)).^2);
-% 
-%     L = tril(ones(size(Q1)),-1);
-%     L(k,k) = 1;
-% 
-%     L1 = L.*(d1*M11 + M12*d2);
-%     L0 = L.*(d1*M01 + M02*d2);
-% 
-%     H(:,:,1) = L1 * M11' + (L.*T) * d2' * B' ...
-%              + L0 * M01' + (L.*S) * d2' * A';
-% 
-%     H(:,:,2) = M12' * L1 + B' * d1' * (L.*T) ...
-%              + M02' * L0 + A' * d1' * (L.*S);
-% 
-%     % Scale by the omitted factor 2
-%     H = 2*H;
-% 
-% end
+
+function g = egrad(Q)
+
+    tS = Q'*[b A]*blkdiag(1,Q);
+
+    L = tril(tS,-1);
+
+    % Add "min" part of the objective function
+    [~,k] = min(abs(diag(tS)).^2);
+    L(k,k) = tS(k,k);
+
+    g = 2* [b A]*blkdiag(1,Q)*L' + 2* (Q'*A)' * L(:,2:end);
+    
+end
+
+function H = ehess(Q, d)
+
+    tS = Q'*[b A]*blkdiag(1,Q);
+
+    L = tril(ones(size(tS)),-1);
+
+    % Add "min" part of the objective function
+    [~,k] = min(abs(diag(tS)).^2);
+    L(k,k) = 1;
+
+    DL = L.*(d'*[b A]*blkdiag(1,Q) + Q'*[b A]*blkdiag(0,d));
+
+    H = [b A]*blkdiag(0,d)*(L.*tS)' + [b A]*blkdiag(1,Q)*DL' ...
+        + (d'*A)' * (L(:,2:end).*tS(:,2:end)) + (Q'*A)' * DL(:,2:end);
+    H = 2*H;
+   
+end
 
 end
